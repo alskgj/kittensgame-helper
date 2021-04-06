@@ -17,3 +17,11 @@ for (btn of gamePage.bldTab.buttons) {
     }
 }
 """)
+
+upgrade_embassies = """
+for (racePanel of gamePage.diplomacyTab.racePanels) {
+    if (racePanel.embassyButton.model.enabled) {
+        racePanel.embassyButton.buttonContent.click();
+    }
+}
+"""
