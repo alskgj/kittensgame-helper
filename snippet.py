@@ -9,8 +9,26 @@ import js_snippets
 from datetime import datetime
 from random import randint
 import time
-download_path = path.normpath(path.join(path.dirname(__file__), 'downloads'))
 
+import logging
+
+
+def setup_logging():
+    logging.basicConfig(
+        filename='super_kitten.log',
+        level=logging.DEBUG,
+        format='%(asctime)s %(levelname)s %(message)s'
+    )
+    logging.getLogger('urllib3').setLevel(logging.WARNING)
+    logging.getLogger('selenium').setLevel(logging.WARNING)
+    logging.getLogger('apscheduler').setLevel(logging.WARNING)
+    logging.getLogger('concurrent').setLevel(logging.WARNING)
+    logging.getLogger('asyncio').setLevel(logging.WARNING)
+    loggers = [logging.getLogger(name) for name in logging.root.manager.loggerDict]
+    print(loggers)
+
+
+download_path = path.normpath(path.join(path.dirname(__file__), 'downloads'))
 profile = webdriver.FirefoxProfile()
 
 # language stuff
@@ -41,11 +59,13 @@ driver = webdriver.Firefox(firefox_profile=profile)
 driver.get("http://kittensgame.com/web/")
 
 # game needs some time to load
-time.sleep(7)
+time.sleep(10)
 
 constructed_buildings = []
 
+
 def import_save(location):
+    logging.info(f'Loading save {location}')
     with open(location) as fo:
         save = fo.read()
 
@@ -61,6 +81,7 @@ def import_save(location):
     alert_obj = driver.switch_to.alert
     alert_obj.accept()
     time.sleep(2)
+    logging.debug(f'Loaded save {location}')
 
 
 def export_save():
@@ -70,17 +91,12 @@ def export_save():
     time.sleep(1)
     driver.find_element_by_id('closeButton').click()
     driver.find_element_by_id('optionsDiv').send_keys(Keys.ESCAPE)
-    print(f"{datetime.now().strftime('%H:%M:%S')} saving...")
+    logging.info('saving...')
     do_report()
 
 
 def auto_hunt():
     catpower = driver.execute_script("return gamePage.resPool.get('manpower');")
-    # print(f"{datetime.now().strftime('%H:%M:%S')} starthunt [{catpower['value']}].", end=" ")
-    example_catpower = {
-        'calculatePerTick': True, 'color': '#DBA901', 'isHidden': False, 'isRefundable': {}, 'maxValue': 3906.1,
-        'name': 'manpower', 'perTickCached': 2.860868, 'title': 'catpower', 'transient': True, 'type': 'common',
-        'unlocked': True, 'value': 3906.1, 'visible': True}
 
     # prioritize trading over hunting
     gold_obj = driver.execute_script(f'return gamePage.resPool.get("gold");')
@@ -88,12 +104,9 @@ def auto_hunt():
         auto_trade()
 
     if catpower["value"] >= catpower["maxValue"] * 0.8:
-        # print(f"crafting parchments before hunt...")
         driver.execute_script(f'gamePage.craftAll("parchment")')
-        # print(f"{datetime.now().strftime('%H:%M:%S')} Hunting, cat power is: ({catpower['value']}/{catpower['maxValue']})")
+        logging.info(f"Hunting, cat power is: ({round(catpower['value'])}/{round(catpower['maxValue'])})")
         driver.execute_script("gamePage.village.huntAll();")
-
-    # print(f"{datetime.now().strftime('%H:%M:%S')} endhunt")
 
 
 def is_researched(tech):
@@ -104,13 +117,33 @@ def is_researched(tech):
     # there is also 'label'
     filtered = [t for t in science if t['name'] == tech]
     if len(filtered) != 1:
-        print(f'Searched for {tech}, but couldn\'t find it. Filtered is {filtered}.')
+        logging.warning(f'Searched for {tech}, but couldn\'t find it. Filtered is {filtered}.')
         raise NotImplementedError
 
     return filtered[0]['researched']
 
 
+def geodesy_researched():
+    # todo only build tradepost/temples after geodesy is researched
+    """
+    geodesy researched snippet
+
+    gamePage.workshop.meta[0].meta[55].researched
+    wu = gamePage.workshop.meta[0].meta
+    geodesy = [element for element in wu if element["name"] == "geodesy"][0]
+    geodesy_researched = geodesy["researched"]
+    """
+    workshop_upgrades = driver.execute_script('return gamePage.workshop.meta[0].meta')
+    geodesy = [element for element in workshop_upgrades if element["name"] == "geodesy"][0]
+    logging.debug(f'geodesy research status: {geodesy["researched"]}')
+    return geodesy["researched"]
+
+
 def auto_craft():
+    # todo only craft steel in the early game if we have more plates, so that we can build
+    # some ships
+    # if this isn't implemented it might be hard to buy the first few calciners, because early titanite is hard to find
+
     crafts = {
         'wood': 'beam',
         'minerals': 'slab',
@@ -127,16 +160,29 @@ def auto_craft():
         else:
             crafts['science'] = 'blueprint'
 
+    # remove parchment -> compendium if we don't have a lot of parchment
+    # this is to ensure chapel can be built
+    chapel = driver.execute_script('return gamePage.bld.get("chapel")')
+    parchment_chapel_price = chapel['prices'][2]['val'] * driver.execute_script('return game.bld.getPriceRatio("chapel")') ** chapel['on']
+    parchment_held = driver.execute_script(f'return gamePage.resPool.get("parchment");')['value']
+    if parchment_held < parchment_chapel_price*2 and chapel['unlocked']:
+        del crafts['culture']
+        logging.debug(f'removed culture since {parchment_chapel_price}*2 is higher than {parchment_held}')
 
+    crafted = []
     for resource in crafts:
         res_obj = driver.execute_script(f'return gamePage.resPool.get("{resource}");')
         if res_obj['value'] >= res_obj['maxValue'] * 0.9:
             driver.execute_script(f'gamePage.craftAll("{crafts[resource]}")')
-            # print(f'Crafting {crafts[resource]}!')
+            crafted.append(crafts[resource])
+
+    if crafted:
+        logging.info(f'Crafting {crafted}!')
 
 
 def auto_trade():
     # todo send explorers to find griffins
+    # todo add trading to report
     gold_obj = driver.execute_script(f'return gamePage.resPool.get("gold");')
     iron_obj = driver.execute_script(f'return gamePage.resPool.get("iron");')
     titanium_obj = driver.execute_script(f'return gamePage.resPool.get("titanium");')
@@ -144,8 +190,11 @@ def auto_trade():
     zebras_unlocked = driver.execute_script(f'return gamePage.diplomacy.get("zebras").unlocked;')
     griffins_unlocked = driver.execute_script(f'return gamePage.diplomacy.get("griffins").unlocked;')
 
-    # auto level embassies
-    driver.execute_script(js_snippets.upgrade_embassies)
+    # auto level embassies - only if there are some temples, to ensure there is at least some culture production
+    if driver.execute_script('return gamePage.bld.get("temple").on;') >= 10:
+        switch_to_trade_tab()
+        time.sleep(1)
+        driver.execute_script(js_snippets.upgrade_embassies)
 
     # enough gold to trade
     if gold_obj['value'] >= gold_obj['maxValue'] * 0.8:
@@ -155,8 +204,7 @@ def auto_trade():
             driver.execute_script(f'gamePage.craftAll("plate")')
 
         if titanium_obj['value'] <= titanium_obj['maxValue'] * 0.5 and zebras_unlocked:
-            print(f'{datetime.now().strftime("%H:%M:%S")} trading with zebras')
-            # create slabs if not available
+            logging.info('trading with zebras')
             slabs = driver.execute_script(f'return gamePage.resPool.get("slab");')['value']
             if slabs < 100:
                 driver.execute_script(f'gamePage.craftAll("slab")')
@@ -164,7 +212,9 @@ def auto_trade():
 
         elif griffins_unlocked:
             driver.execute_script('gamePage.diplomacy.tradeAll(game.diplomacy.get("griffins"));')
-            print(f'{datetime.now().strftime("%H:%M:%S")} trading with griffins')
+            logging.info('trading with griffins')
+
+    switch_to_build_tab()
 
 
 def auto_build():
@@ -201,6 +251,7 @@ def auto_build():
     if is_researched('rocketry'):
         target_buildings.append('mansion')
 
+    logging.debug(f'trying to build any of {target_buildings}')
 
     # todo add conditional buildings, maybe
     # temple, after reaching space?
@@ -208,7 +259,6 @@ def auto_build():
     # harbour? need to craft scaffold
 
     # todo library - datacenter
-
 
     buildable = driver.execute_script(js_snippets.all_buildable)
 
@@ -221,9 +271,9 @@ def auto_build():
             driver.execute_script(js_snippets.build_x.render(x=target))
             buildable = driver.execute_script(js_snippets.all_buildable)
     if built:
-        print(f"{datetime.now().strftime('%H:%M:%S')} built {built}")
-    # if not built:
-    #     print(f"{datetime.now().strftime('%H:%M:%S')} built nothing, buildable: {buildable}")
+        logging.info(f"built {built}")
+    if not built:
+        logging.debug(f"built nothing, buildable: {buildable}")
 
 
 def do_report():
@@ -234,7 +284,6 @@ def do_report():
             counts[building] = 1
         else:
             counts[building] += 1
-    counts['mansion'] += 10
 
     print('Constructed the following buildings since last time saving: ')
     for building, count in counts.items():
@@ -250,6 +299,13 @@ def switch_to_build_tab():
     driver.execute_script('gamePage.bldTab.domNode.click();')
 
 
+def switch_to_trade_tab():
+    """Can't build without this - but disrupts user from playing
+    manually - so this is meant to be invoked infrequently, to prevent
+    long phases of inactivity in a tab that prevents building"""
+    driver.execute_script('gamePage.diplomacyTab.domNode.click();')
+
+
 def sorter(save_name):
     base_path = os.path.basename(save_name)
     run, year, day = re.findall(r'\d+', base_path)
@@ -257,8 +313,9 @@ def sorter(save_name):
 
 
 if __name__ == '__main__':
+    setup_logging()
+
     most_recent_save = sorted(glob.glob(download_path + "/*.txt"), key=sorter)[-1]
-    print(f"{datetime.now().strftime('%H:%M:%S')} importing most recent save {most_recent_save}...")
     import_save(most_recent_save)
 
     print(f'{datetime.now().strftime("%H:%M:%S")} setting up scheduler...')
@@ -272,7 +329,6 @@ if __name__ == '__main__':
     scheduler.add_job(switch_to_build_tab, 'interval', minutes=10)
     time.sleep(3)
     scheduler.add_job(export_save, 'interval', minutes=20)
-
 
     scheduler.start()
     input()
