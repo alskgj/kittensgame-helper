@@ -25,7 +25,6 @@ def setup_logging():
     logging.getLogger('concurrent').setLevel(logging.WARNING)
     logging.getLogger('asyncio').setLevel(logging.WARNING)
     loggers = [logging.getLogger(name) for name in logging.root.manager.loggerDict]
-    print(loggers)
 
 
 download_path = path.normpath(path.join(path.dirname(__file__), 'downloads'))
@@ -226,10 +225,8 @@ def auto_build():
         'logHouse',
 
         'barn',
-        'observatory',
+
         'mine',
-        'lumberMill',
-        'quarry',
         'smelter',
         
         'library',
@@ -242,14 +239,26 @@ def auto_build():
         'chapel'
     ]
 
+    # todo building to many observatories and lumbermill early causes iron shortages
+    # -> limit production of those
+    # todo are those numbers reasonable?
+    obs_level = driver.execute_script('return gamePage.bld.get("observatory").on;')
+    lm_level = driver.execute_script('return gamePage.bld.get("lumberMill").on;')
+    if obs_level <= 10 or is_researched('rocketry'):
+        target_buildings.append('observatory')
+    if lm_level <= 30 or is_researched('rocketry'):
+        target_buildings.append('lumberMill')
+
+
     # manuscripts and gold should be available now
     if is_researched('genetics'):
         target_buildings.append('temple')
         target_buildings.append('tradepost')
 
-    # titanium shouldn't be a problem anymore
+    # titanium and steel shouldn't be a problem anymore
     if is_researched('rocketry'):
-        target_buildings.append('mansion')
+        target_buildings.append('mansion')  # consumes lots of titanium
+        target_buildings.append('quarry')   # consumes lots of steel
 
     logging.debug(f'trying to build any of {target_buildings}')
 
@@ -285,7 +294,7 @@ def do_report():
         else:
             counts[building] += 1
 
-    print('Constructed the following buildings since last time saving: ')
+    print(f'{datetime.now().strftime("%H:%M:%S")} Constructed the following buildings since last time saving: ')
     for building, count in counts.items():
         print(f'{count:2}x {building}')
 
