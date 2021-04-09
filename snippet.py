@@ -11,13 +11,18 @@ from random import randint
 import time
 
 import logging
+import random
+import configparser
+config = configparser.ConfigParser()
+config.read('config.ini')
 
 
 def setup_logging():
     logging.basicConfig(
         filename='super_kitten.log',
         level=logging.DEBUG,
-        format='%(asctime)s %(levelname)s %(message)s'
+        format='%(asctime)s %(levelname)s %(message)s',
+        filemode='w'
     )
     logging.getLogger('urllib3').setLevel(logging.WARNING)
     logging.getLogger('selenium').setLevel(logging.WARNING)
@@ -25,6 +30,27 @@ def setup_logging():
     logging.getLogger('concurrent').setLevel(logging.WARNING)
     logging.getLogger('asyncio').setLevel(logging.WARNING)
     loggers = [logging.getLogger(name) for name in logging.root.manager.loggerDict]
+
+    logger = logging.getLogger(__name__)
+    formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(formatter)
+
+    logger.addHandler(console_handler)
+
+    file_handler = logging.FileHandler(
+        filename='super_kitten.log',
+        mode='w'
+    )
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
+
+    return logger
+
 
 
 download_path = path.normpath(path.join(path.dirname(__file__), 'downloads'))
@@ -64,7 +90,7 @@ constructed_buildings = []
 
 
 def import_save(location):
-    logging.info(f'Loading save {location}')
+    logger.info(f'Loading save {location}')
     with open(location) as fo:
         save = fo.read()
 
@@ -80,7 +106,7 @@ def import_save(location):
     alert_obj = driver.switch_to.alert
     alert_obj.accept()
     time.sleep(2)
-    logging.debug(f'Loaded save {location}')
+    logger.debug(f'Loaded save {location}')
 
 
 def export_save():
@@ -90,7 +116,7 @@ def export_save():
     time.sleep(1)
     driver.find_element_by_id('closeButton').click()
     driver.find_element_by_id('optionsDiv').send_keys(Keys.ESCAPE)
-    logging.info('saving...')
+    logger.info('saving...')
     do_report()
 
 
@@ -104,7 +130,7 @@ def auto_hunt():
 
     if catpower["value"] >= catpower["maxValue"] * 0.8:
         driver.execute_script(f'gamePage.craftAll("parchment")')
-        logging.info(f"Hunting, cat power is: ({round(catpower['value'])}/{round(catpower['maxValue'])})")
+        logger.info(f"Hunting, cat power is: ({round(catpower['value'])}/{round(catpower['maxValue'])})")
         driver.execute_script("gamePage.village.huntAll();")
 
 
@@ -116,7 +142,7 @@ def is_researched(tech):
     # there is also 'label'
     filtered = [t for t in science if t['name'] == tech]
     if len(filtered) != 1:
-        logging.warning(f'Searched for {tech}, but couldn\'t find it. Filtered is {filtered}.')
+        logger.warning(f'Searched for {tech}, but couldn\'t find it. Filtered is {filtered}.')
         raise NotImplementedError
 
     return filtered[0]['researched']
@@ -134,7 +160,7 @@ def geodesy_researched():
     """
     workshop_upgrades = driver.execute_script('return gamePage.workshop.meta[0].meta')
     geodesy = [element for element in workshop_upgrades if element["name"] == "geodesy"][0]
-    logging.debug(f'geodesy research status: {geodesy["researched"]}')
+    logger.debug(f'geodesy research status: {geodesy["researched"]}')
     return geodesy["researched"]
 
 
@@ -166,7 +192,7 @@ def auto_craft():
     parchment_held = driver.execute_script(f'return gamePage.resPool.get("parchment");')['value']
     if parchment_held < parchment_chapel_price*2 and chapel['unlocked']:
         del crafts['culture']
-        logging.debug(f'removed culture since {parchment_chapel_price}*2 is higher than {parchment_held}')
+        logger.debug(f'removed culture since {parchment_chapel_price}*2 is higher than {parchment_held}')
 
     crafted = []
     for resource in crafts:
@@ -176,7 +202,20 @@ def auto_craft():
             crafted.append(crafts[resource])
 
     if crafted:
-        logging.info(f'Crafting {crafted}!')
+        logger.info(f'Crafting {crafted}!')
+
+
+def auto_embassies():
+    # this is fairly disruptive since it switches tab
+    # auto level embassies - only if there are some temples, to ensure there is at least some culture production
+    if driver.execute_script('return gamePage.bld.get("temple").on;') >= 10:
+        switch_to_trade_tab()
+        time.sleep(1)
+        driver.execute_script(js_snippets.upgrade_embassies)
+
+    # this is useful, since we want to be on the build tab often, if we are on another tab,
+    # prices don't get updated and nothing gets built
+    switch_to_build_tab()
 
 
 def auto_trade():
@@ -189,12 +228,6 @@ def auto_trade():
     zebras_unlocked = driver.execute_script(f'return gamePage.diplomacy.get("zebras").unlocked;')
     griffins_unlocked = driver.execute_script(f'return gamePage.diplomacy.get("griffins").unlocked;')
 
-    # auto level embassies - only if there are some temples, to ensure there is at least some culture production
-    if driver.execute_script('return gamePage.bld.get("temple").on;') >= 10:
-        switch_to_trade_tab()
-        time.sleep(1)
-        driver.execute_script(js_snippets.upgrade_embassies)
-
     # enough gold to trade
     if gold_obj['value'] >= gold_obj['maxValue'] * 0.8:
 
@@ -203,7 +236,7 @@ def auto_trade():
             driver.execute_script(f'gamePage.craftAll("plate")')
 
         if titanium_obj['value'] <= titanium_obj['maxValue'] * 0.5 and zebras_unlocked:
-            logging.info('trading with zebras')
+            logger.info('trading with zebras')
             slabs = driver.execute_script(f'return gamePage.resPool.get("slab");')['value']
             if slabs < 100:
                 driver.execute_script(f'gamePage.craftAll("slab")')
@@ -211,9 +244,63 @@ def auto_trade():
 
         elif griffins_unlocked:
             driver.execute_script('gamePage.diplomacy.tradeAll(game.diplomacy.get("griffins"));')
-            logging.info('trading with griffins')
+            logger.info('trading with griffins')
 
-    switch_to_build_tab()
+def constraint_satisfied(constraint):
+    if constraint == 'always':
+        return True
+    elif constraint == 'never':
+        return False
+    else:
+        return is_researched(constraint)
+
+
+def config_build():
+    config.read('config.ini')  # refresh view, to reflect user changes
+    build_any_of_those = []
+
+    buildable_with_prices = driver.execute_script(js_snippets.buildable_with_prices)
+    for building in buildable_with_prices:
+        name = building["name"]            # ie 'mansion'
+        resources = building["resources"]  # ie ['titanium', 'slab', 'steel']
+
+        all_constraints_satisfied = True
+        for res in resources:
+            try:
+                constraint = config['Auto Build Prerequisites'][res]
+            except KeyError:
+                print(f"Resource {res} not in Auto Build Prerequisites...")
+                logger.critical(f"Resource {res} not in Auto Build Prerequisites...")
+                raise NotImplementedError
+            if not constraint_satisfied(constraint):
+                logger.debug(f"{name} does not satisfy constraint {constraint} from res {res}")
+                all_constraints_satisfied = False
+
+        if all_constraints_satisfied:
+            build_any_of_those.append(name)
+
+    return build_any_of_those
+
+
+def constraint_build():
+    buildable = config_build()
+    built = []
+    while buildable:
+
+        building = random.choice(buildable)
+        driver.execute_script(js_snippets.build_x.render(x=building))
+
+        # log stuff
+        constructed_buildings.append(building)
+        built.append(building)
+
+        # check if we can build more stuff
+        buildable = config_build()
+
+    if built:
+        logger.info(f"built {built}")
+    if not built:
+        logger.debug(f"Built nothing!")
 
 
 def auto_build():
@@ -249,18 +336,14 @@ def auto_build():
     if lm_level <= 30 or is_researched('rocketry'):
         target_buildings.append('lumberMill')
 
-
-    # manuscripts and gold should be available now
-    if is_researched('genetics'):
-        target_buildings.append('temple')
-        target_buildings.append('tradepost')
-
     # titanium and steel shouldn't be a problem anymore
     if is_researched('rocketry'):
+        target_buildings.append('temple')
+        target_buildings.append('tradepost')
         target_buildings.append('mansion')  # consumes lots of titanium
         target_buildings.append('quarry')   # consumes lots of steel
 
-    logging.debug(f'trying to build any of {target_buildings}')
+    logger.debug(f'trying to build any of {target_buildings}')
 
     # todo add conditional buildings, maybe
     # temple, after reaching space?
@@ -280,9 +363,9 @@ def auto_build():
             driver.execute_script(js_snippets.build_x.render(x=target))
             buildable = driver.execute_script(js_snippets.all_buildable)
     if built:
-        logging.info(f"built {built}")
+        logger.info(f"built {built}")
     if not built:
-        logging.debug(f"built nothing, buildable: {buildable}")
+        logger.debug(f"built nothing, buildable: {buildable}")
 
 
 def do_report():
@@ -321,8 +404,8 @@ def sorter(save_name):
     return int(run)*10**6 + int(year)*10**3 + int(day)
 
 
+logger = setup_logging()
 if __name__ == '__main__':
-    setup_logging()
 
     most_recent_save = sorted(glob.glob(download_path + "/*.txt"), key=sorter)[-1]
     import_save(most_recent_save)
@@ -331,11 +414,13 @@ if __name__ == '__main__':
     scheduler = BlockingScheduler()
 
     scheduler.add_job(auto_hunt, 'interval', seconds=30)
-    scheduler.add_job(auto_build, 'interval', seconds=31)
+    scheduler.add_job(constraint_build, 'interval', seconds=31)
     time.sleep(1)
     scheduler.add_job(auto_craft, 'interval', minutes=2)
     scheduler.add_job(auto_trade, 'interval', minutes=1, seconds=1)
-    scheduler.add_job(switch_to_build_tab, 'interval', minutes=10)
+
+    # fairly disruptive, since this switches tab
+    scheduler.add_job(auto_embassies, 'interval', minutes=10, seconds=5)
     time.sleep(3)
     scheduler.add_job(export_save, 'interval', minutes=20)
 

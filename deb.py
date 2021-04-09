@@ -7,6 +7,9 @@ import re
 from apscheduler.schedulers.blocking import BlockingScheduler
 import js_snippets
 from datetime import datetime
+import configparser
+config = configparser.ConfigParser()
+config.read('config.ini')
 
 import time
 download_path = path.normpath(path.join(path.dirname(__file__), 'downloads'))
@@ -76,11 +79,47 @@ def is_researched(tech):
     return filtered[0]['researched']
 
 
-
 def sorter(save_name):
     base_path = os.path.basename(save_name)
     run, year, day = re.findall(r'\d+', base_path)
     return int(run)*10**6 + int(year)*10**3 + int(day)
+
+
+def constraint_satisfied(constraint):
+    if constraint == 'always':
+        return True
+    elif constraint == 'never':
+        return False
+    else:
+        return is_researched(constraint)
+
+
+def config_build():
+    config.read('config.ini')  # refresh view, to reflect user changes
+    build_any_of_those = []
+
+    buildable_with_prices = driver.execute_script(js_snippets.buildable_with_prices)
+    for building in buildable_with_prices:
+        name = building["name"]            # ie 'mansion'
+        resources = building["resources"]  # ie ['titanium', 'slab', 'steel']
+
+        all_constraints_satisfied = True
+        for res in resources:
+            try:
+                constraint = config['Auto Build Prerequisites'][res]
+            except KeyError:
+                print(f"Resource {res} not in Auto Build Prerequisites...")
+                raise NotImplementedError
+            if not constraint_satisfied(constraint):
+                print(f"{name} does not satisfy constraint {constraint} from res {res}")
+                all_constraints_satisfied = False
+
+        if all_constraints_satisfied:
+            build_any_of_those.append(name)
+
+    return build_any_of_those
+
+
 
 
 if __name__ == '__main__':

@@ -1,14 +1,40 @@
 from jinja2 import Template
 
+# prices
+"""
+gamePage.bldTab.children[18].model.prices
+(3) […]
+​0: Object { val: 2853.987852346672, name: "steel" }
+​1: Object { val: 1426.993926173336, name: "gear" }
+​2: Object { val: 1426.993926173336, name: "scaffold" }
+"""
+
+
 all_buildable = """
-var buildable_right_now  = []
+var buildable_right_now  = [];
 for (btn of gamePage.bldTab.children) {
   if (btn.model.enabled && btn.model.hasOwnProperty("metadata")) {
     buildable_right_now.push(btn.model.metadata.name);
     }
 }
+
 return buildable_right_now;
 """
+
+buildable_with_prices = """
+var prices = [];
+for (btn of gamePage.bldTab.children) {
+  if (btn.model.enabled && btn.model.hasOwnProperty("metadata")) {
+    let obj = {name: btn.model.metadata.name};
+    let resources = [];
+    for (element of btn.model.prices) {
+      resources.push(element.name);
+    }
+    obj["resources"] = resources;
+    prices.push(obj);
+  }
+}
+return prices;"""
 
 build_x = Template("""
 for (btn of gamePage.bldTab.children) {
