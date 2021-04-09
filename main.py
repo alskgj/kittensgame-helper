@@ -117,13 +117,15 @@ def auto_embassies():
     # this is fairly disruptive since it switches tab
     # auto level embassies - only if there are some temples, to ensure there is at least some culture production
     if game.get_building_obj('temple')['on'] >= 10:
-        game.switch_to_trade_tab()
+        # game.switch_to_trade_tab()
+        game.update_diplomacy_tab()
         time.sleep(1)
         game.upgrade_embassies()
 
     # this is useful, since we want to be on the build tab often, if we are on another tab,
     # prices don't get updated and nothing gets built
-    game.switch_to_build_tab()
+    game.update_build_tab()
+    #game.switch_to_build_tab()
 
 
 def auto_trade():
@@ -170,6 +172,7 @@ def config_build():
 
     buildable_with_prices = game.get_buildable_with_prices()
     for building in buildable_with_prices:
+        game.update_build_tab()
         name = building["name"]            # ie 'mansion'
         resources = building["resources"]  # ie ['titanium', 'slab', 'steel']
 

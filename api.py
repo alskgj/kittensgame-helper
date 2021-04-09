@@ -72,17 +72,24 @@ class Game:
         time.sleep(2)
         self.logger.debug(f'Loaded save {most_recent_save}')
 
-    def switch_to_trade_tab(self):
-        """Can't build embassies without this - but disrupts user from playing
-        manually - so this is meant to be invoked infrequently, to prevent
-        long phases of inactivity in a tab that prevents building"""
-        self.driver.execute_script('gamePage.diplomacyTab.domNode.click();')
+    # try to replace this with the update functions
+    # def switch_to_trade_tab(self):
+    #     """Can't build embassies without this - but disrupts user from playing
+    #     manually - so this is meant to be invoked infrequently, to prevent
+    #     long phases of inactivity in a tab that prevents building"""
+    #     self.driver.execute_script('gamePage.diplomacyTab.domNode.click();')
+    #
+    # def switch_to_build_tab(self):
+    #     """Can't construct buildings without this - but disrupts user from playing
+    #     manually - so this is meant to be invoked infrequently, to prevent
+    #     long phases of inactivity in a tab that prevents building"""
+    #     self.driver.execute_script('gamePage.bldTab.domNode.click();')
 
-    def switch_to_build_tab(self):
-        """Can't construct buildings without this - but disrupts user from playing
-        manually - so this is meant to be invoked infrequently, to prevent
-        long phases of inactivity in a tab that prevents building"""
-        self.driver.execute_script('gamePage.bldTab.domNode.click();')
+    def update_build_tab(self):
+        self.driver.execute_script('gamePage.bldTab.update();')
+
+    def update_diplomacy_tab(self):
+        self.driver.execute_script('gamePage.diplomacy.update();')
 
     def build(self, building_name):
         self.driver.execute_script(js_snippets.build_x.render(x=building_name))
