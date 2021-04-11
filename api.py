@@ -1,6 +1,10 @@
 from os import path
 
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions
+from selenium.webdriver.common.by import By
 from selenium import webdriver
+from selenium.common.exceptions import NoAlertPresentException
 import logging
 import time
 import os
@@ -20,6 +24,21 @@ def sorter(save_name):
 class Game:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
+        formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.INFO)
+        console_handler.setFormatter(formatter)
+
+        self.logger.addHandler(console_handler)
+
+        file_handler = logging.FileHandler(
+            filename='super_kitten.log',
+            mode='w'
+        )
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(formatter)
+        self.logger.addHandler(file_handler)
 
         self.download_path = path.normpath(path.join(path.dirname(__file__), 'downloads'))
 
@@ -46,12 +65,18 @@ class Game:
         self.driver = webdriver.Firefox(firefox_profile=profile)
         self.logger.info('game api ready')
 
-    def start_game(self):
+        self._start_game()
+        self._setup_additional_buttons()
+
+    def _start_game(self):
         """ Loads the game and imports the most recent save
         """
         self.driver.get("http://kittensgame.com/web/")
-        # game needs some time to load
-        time.sleep(10)
+
+        # wait until page is loaded
+        WebDriverWait(driver=self.driver, timeout=100).until(
+            expected_conditions.element_to_be_clickable((By.ID, 'logLink'))
+        )
 
         most_recent_save = sorted(glob.glob(self.download_path + "/*.txt"), key=sorter)[-1]
         self.logger.info(f'Loading save {most_recent_save}')
@@ -64,26 +89,18 @@ class Game:
 
         # do import
         self.driver.find_element_by_id('importData').send_keys(save)
-        time.sleep(1)
         self.driver.find_element_by_id('doImportButton').click()
-        time.sleep(1)
         alert_obj = self.driver.switch_to.alert
+
         alert_obj.accept()
-        time.sleep(2)
         self.logger.debug(f'Loaded save {most_recent_save}')
 
-    # try to replace this with the update functions
-    # def switch_to_trade_tab(self):
-    #     """Can't build embassies without this - but disrupts user from playing
-    #     manually - so this is meant to be invoked infrequently, to prevent
-    #     long phases of inactivity in a tab that prevents building"""
-    #     self.driver.execute_script('gamePage.diplomacyTab.domNode.click();')
-    #
-    # def switch_to_build_tab(self):
-    #     """Can't construct buildings without this - but disrupts user from playing
-    #     manually - so this is meant to be invoked infrequently, to prevent
-    #     long phases of inactivity in a tab that prevents building"""
-    #     self.driver.execute_script('gamePage.bldTab.domNode.click();')
+    def _setup_additional_buttons(self):
+        self.driver.execute_script(js_snippets.function_button_pause_all)
+        self.driver.execute_script(js_snippets.add_pause_all_button)
+
+    def is_paused(self):
+        return self.driver.execute_script('return script_paused;')
 
     def update_build_tab(self):
         self.driver.execute_script('gamePage.bldTab.update();')
@@ -154,7 +171,10 @@ class Game:
         self.driver.execute_script(js_snippets.upgrade_embassies)
 
     def trade_all(self, race):
-        self.driver.execute_script(f'gamePage.diplomacy.tradeAll(game.diplomacy.get("{race}"));')
+        if self.is_paused():
+            self.logger.info("Not trading - script is paused.")
+        else:
+            self.driver.execute_script(f'gamePage.diplomacy.tradeAll(game.diplomacy.get("{race}"));')
 
     def hunt(self):
         self.driver.execute_script("gamePage.village.huntAll();")

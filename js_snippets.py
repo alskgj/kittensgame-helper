@@ -51,3 +51,24 @@ for (racePanel of gamePage.diplomacyTab.racePanels) {
     }
 }
 """
+
+
+add_pause_all_button = '$("#footerLinks").append(' \
+                      '\'<div><button id="toggleScript" style="color:black" ' \
+                      'onclick="theButton()">Pause script...</button>' \
+                      '</br></div>\');'
+
+function_button_pause_all = """
+window.script_paused = false;
+window.theButton = function() {
+if (document.getElementById("toggleScript").style.color == "black") {
+    document.getElementById("toggleScript").style.color = 'red';
+    gamePage.msg('Script is now paused!');
+    window.script_paused = true;
+} else {
+    document.getElementById("toggleScript").style.color = 'black';
+    gamePage.msg('Script is now running!');
+    window.script_paused = false;
+}
+}
+"""

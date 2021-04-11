@@ -1,6 +1,6 @@
 from os import path
 from apscheduler.schedulers.blocking import BlockingScheduler
-
+from apscheduler.job import Job
 from datetime import datetime
 from random import randint
 import time
@@ -9,6 +9,7 @@ import api
 import logging
 import random
 import configparser
+import typing
 config = configparser.ConfigParser()
 config.read('config.ini')
 
@@ -87,7 +88,9 @@ def auto_craft():
 
     if game.is_researched('navigation'):
         crafts['science'] = 'compedium'
-    if game.is_researched('genetics'):
+    else:
+        logger.debug('navigation is not researched yet, so not crafting compendium')
+    if game.is_researched('biochemistry'):
         if randint(0, 1) == 0:
             crafts['science'] = 'compedium'
         else:
@@ -166,9 +169,12 @@ def constraint_satisfied(constraint):
         return game.is_researched(constraint)
 
 
-def config_build():
+def config_build(log=False):
     config.read('config.ini')  # refresh view, to reflect user changes
     build_any_of_those = []
+
+    buildings_with_unsatisfied_constraints = set()
+    constraints_not_satisfied = set()
 
     buildable_with_prices = game.get_buildable_with_prices()
     for building in buildable_with_prices:
@@ -177,6 +183,7 @@ def config_build():
         resources = building["resources"]  # ie ['titanium', 'slab', 'steel']
 
         all_constraints_satisfied = True
+
         for res in resources:
             try:
                 constraint = config['Auto Build Prerequisites'][res]
@@ -185,17 +192,21 @@ def config_build():
                 logger.critical(f"Resource {res} not in Auto Build Prerequisites...")
                 raise NotImplementedError
             if not constraint_satisfied(constraint):
-                logger.debug(f"{name} does not satisfy constraint {constraint} from res {res}")
+                buildings_with_unsatisfied_constraints.add(name)
+                constraints_not_satisfied.add(f'{res}:{constraint}')
                 all_constraints_satisfied = False
 
         if all_constraints_satisfied:
             build_any_of_those.append(name)
 
+    if log:
+        logger.debug(f'Buildings with unsatisfied constraints: {buildings_with_unsatisfied_constraints}')
+        logger.debug(f'Unsatisfied constraints: {constraints_not_satisfied}')
     return build_any_of_those
 
 
 def constraint_build():
-    buildable = config_build()
+    buildable = config_build(log=True)
     built = []
     while buildable:
 
@@ -214,6 +225,9 @@ def constraint_build():
     if not built:
         logger.debug(f"Built nothing!")
 
+    # reset cache
+    game.is_researched.cache_clear()
+
 
 def do_report():
     counts = {}
@@ -231,24 +245,38 @@ def do_report():
     constructed_buildings = []
 
 
+def watchdog(jobs: typing.List[Job]):
+    pause_everything = game.is_paused()
+    jobs_are_paused = jobs[0].next_run_time is None
+
+    if jobs_are_paused and not pause_everything:
+        logger.info("Resuming all jobs!")
+        for job in jobs:
+            job.resume()
+
+    elif not jobs_are_paused and pause_everything:
+        logger.info("Pausing all jobs!")
+        for job in jobs:
+            job.pause()
+
+
 logger = setup_logging()
 if __name__ == '__main__':
     game = api.Game()
-    game.start_game()
 
     print(f'{datetime.now().strftime("%H:%M:%S")} setting up scheduler...')
     scheduler = BlockingScheduler()
 
-    scheduler.add_job(auto_hunt, 'interval', seconds=30)
-    scheduler.add_job(constraint_build, 'interval', seconds=31)
-    time.sleep(1)
-    scheduler.add_job(auto_craft, 'interval', minutes=2)
-    scheduler.add_job(auto_trade, 'interval', minutes=1, seconds=1)
+    jobs = [scheduler.add_job(auto_hunt, 'interval', seconds=30),
+            scheduler.add_job(constraint_build, 'interval', seconds=31),
+            scheduler.add_job(auto_craft, 'interval', minutes=2),
+            scheduler.add_job(auto_trade, 'interval', minutes=1, seconds=1),
+            scheduler.add_job(auto_embassies, 'interval', minutes=1, seconds=5)]
 
-    # fairly disruptive, since this switches tab
-    scheduler.add_job(auto_embassies, 'interval', minutes=10, seconds=5)
     time.sleep(3)
-    scheduler.add_job(export_save, 'interval', minutes=20)
+    save_job = scheduler.add_job(export_save, 'interval', minutes=20)
+
+    watchdog_job = scheduler.add_job(watchdog, 'interval', args=(jobs,), seconds=10)
 
     scheduler.start()
     input()
