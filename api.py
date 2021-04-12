@@ -4,7 +4,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions
 from selenium.webdriver.common.by import By
 from selenium import webdriver
-from selenium.common.exceptions import NoAlertPresentException
 import logging
 import time
 import os
@@ -18,7 +17,7 @@ from selenium.webdriver.common.keys import Keys
 def sorter(save_name):
     base_path = os.path.basename(save_name)
     run, year, day = re.findall(r'\d+', base_path)
-    return int(run)*10**6 + int(year)*10**3 + int(day)
+    return int(run)*10**8 + int(year)*10**3 + int(day)
 
 
 class Game:
