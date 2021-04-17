@@ -72,3 +72,25 @@ if (document.getElementById("toggleScript").style.color == "black") {
 }
 }
 """
+
+buy_first_workshop_upgrade = """
+for (btn of gamePage.workshopTab.buttons) {
+  btn.updateVisible();
+  btn.updateEnabled();
+  if (btn.model.enabled && btn.model.visible) {
+    btn.buttonContent.click();
+    return btn.id;
+    }
+}
+"""
+
+research_first = """
+for (btn of gamePage.libraryTab.buttons) {
+  btn.updateVisible();
+  btn.updateEnabled();
+  if (btn.model.enabled && btn.model.visible) {
+    btn.buttonContent.click();
+    return btn.id;
+    }
+}
+"""

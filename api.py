@@ -12,6 +12,7 @@ import re
 import js_snippets
 from functools import lru_cache
 from selenium.webdriver.common.keys import Keys
+from karla import History
 
 
 def sorter(save_name):
@@ -22,6 +23,8 @@ def sorter(save_name):
 
 class Game:
     def __init__(self):
+        self.history = History()
+
         self.logger = logging.getLogger(__name__)
         formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
 
@@ -102,13 +105,38 @@ class Game:
         return self.driver.execute_script('return script_paused;')
 
     def update_build_tab(self):
+        self.driver.execute_script('gamePage.bldTab.render();')
         self.driver.execute_script('gamePage.bldTab.update();')
 
     def update_diplomacy_tab(self):
-        self.driver.execute_script('gamePage.diplomacy.update();')
+        self.driver.execute_script('gamePage.diplomacyTab.render();')
+        self.driver.execute_script('gamePage.diplomacyTab.update();')
+
+    def update_workshop_tab(self):
+        self.driver.execute_script('gamePage.workshopTab.render();')
+        self.driver.execute_script('gamePage.workshopTab.update();')
+
+    def buy_first_workshop_upgrade(self):
+        self.update_workshop_tab()
+        upgrade = self.driver.execute_script(js_snippets.buy_first_workshop_upgrade)
+        if upgrade:
+            self.history.upgrade(upgrade)
+        return upgrade
+
+    def update_science_tab(self):
+        self.driver.execute_script('gamePage.libraryTab.render();')
+        self.driver.execute_script('gamePage.libraryTab.update();')
+
+    def research_something(self):
+        self.update_science_tab()
+        tech = self.driver.execute_script(js_snippets.research_first)
+        if tech:
+            self.history.research(tech)
+        return tech
 
     def build(self, building_name):
         self.driver.execute_script(js_snippets.build_x.render(x=building_name))
+        self.history.build(building_name)
 
     def get_buildable_with_prices(self):
         # todo parse the result into python objects
@@ -116,6 +144,11 @@ class Game:
 
     def craft_all(self, resource):
         self.driver.execute_script(f'gamePage.craftAll("{resource}")')
+        self.history.craft(resource)
+
+    def praise_the_sun(self):
+        self.driver.execute_script('gamePage.religion.praise();')
+        self.history.praise += 1
 
     def get_resource_obj(self, resource):
         # todo parse the result into python objects
@@ -139,7 +172,8 @@ class Game:
         # there is also 'label'
         filtered = [t for t in science if t['name'] == tech]
         if len(filtered) != 1:
-            self.logger.warning(f'Searched for {tech}, but couldn\'t find it. Filtered is {filtered}.')
+            self.logger.warning(f'Searched for [{tech}], but couldn\'t find it. Filtered is {filtered}.')
+            self.logger.warning(f'unfiltered: {[t["name"] for t in science]}')
             raise NotImplementedError
 
         return filtered[0]['researched']
@@ -167,6 +201,7 @@ class Game:
         return self.driver.execute_script(f'return game.bld.getPriceRatio("{building}")')
 
     def upgrade_embassies(self):
+        self.update_diplomacy_tab()
         self.driver.execute_script(js_snippets.upgrade_embassies)
 
     def trade_all(self, race):
@@ -177,6 +212,11 @@ class Game:
 
     def hunt(self):
         self.driver.execute_script("gamePage.village.huntAll();")
+        self.history.hunts += 1
+
+    def report(self):
+        self.history.do_report()
+        self.history.clean()
 
     def export_save(self):
         self.driver.find_element_by_id('options-link').click()
@@ -185,3 +225,11 @@ class Game:
         time.sleep(1)
         self.driver.find_element_by_id('closeButton').click()
         self.driver.find_element_by_id('optionsDiv').send_keys(Keys.ESCAPE)
+
+    def render_tabs(self):
+        pass
+        # def switch_to_trade_tab(self):
+        #     """Can't build embassies without this - but disrupts user from playing
+        #     manually - so this is meant to be invoked infrequently, to prevent
+        #     long phases of inactivity in a tab that prevents building"""
+        # self.driver.execute_script('gamePage.diplomacyTab.domNode.click();')

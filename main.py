@@ -52,11 +52,28 @@ def setup_logging():
 
     return logger
 
+"""
+def do_report():
+    counts = {}
+    global constructed_buildings
+    for building in constructed_buildings:
+        if building not in counts:
+            counts[building] = 1
+        else:
+            counts[building] += 1
+
+    print(f'{datetime.now().strftime("%H:%M:%S")} Constructed the following buildings since last time saving: ')
+    for building, count in counts.items():
+        print(f'{count:2}x {building}')
+
+    constructed_buildings = []
+"""
+
 
 def export_save():
     logger.info('saving...')
     game.export_save()
-    do_report()
+    game.report()
 
 
 def auto_hunt():
@@ -69,7 +86,7 @@ def auto_hunt():
 
     if catpower["value"] >= catpower["maxValue"] * 0.8:
         game.craft_all('parchment')
-        logger.info(f"Hunting, cat power is: ({round(catpower['value'])}/{round(catpower['maxValue'])})")
+        logger.debug(f"Hunting, cat power is: ({round(catpower['value'])}/{round(catpower['maxValue'])})")
         game.hunt()
 
 
@@ -102,8 +119,12 @@ def auto_craft():
     parchment_chapel_price = chapel['prices'][2]['val'] * game.get_price_ratio('chapel') ** chapel['on']
     parchment_held = game.get_resource_obj('parchment')['value']
     if parchment_held < parchment_chapel_price*2 and chapel['unlocked']:
-        del crafts['culture']
-        logger.debug(f'removed culture since {parchment_chapel_price}*2 is higher than {parchment_held}')
+        # before thorium (one of the last researches with blueprints) I only want to hold ~5000 parchments for this
+        # this number was chosen somewhat arbitrarily, but ensures *some* chapels
+        # get built early, without blocking blueprint production for a super long time
+        if game.is_researched('thorium') or parchment_chapel_price <= 5000:
+            del crafts['culture']
+            logger.debug(f'removed culture since {parchment_chapel_price}*2 is higher than {parchment_held}')
 
     crafted = []
     for resource in crafts:
@@ -113,7 +134,7 @@ def auto_craft():
             crafted.append(crafts[resource])
 
     if crafted:
-        logger.info(f'Crafting {crafted}!')
+        logger.debug(f'Crafting {crafted}!')
 
 
 def auto_embassies():
@@ -129,6 +150,20 @@ def auto_embassies():
     # prices don't get updated and nothing gets built
     game.update_build_tab()
     #game.switch_to_build_tab()
+
+
+def auto_upgrade():
+    if config['auto']['upgrade'] == 'True':
+        upgraded = game.buy_first_workshop_upgrade()
+        if upgraded:
+            logger.info(f"bought upgrade: {upgraded}")
+
+
+def auto_research():
+    if config['auto']['research'] == 'True':
+        researched = game.research_something()
+        if researched:
+            logger.info(f"researched: {researched}")
 
 
 def auto_trade():
@@ -158,6 +193,13 @@ def auto_trade():
         elif griffins_unlocked:
             game.trade_all('griffins')
             logger.info('trading with griffins')
+
+
+def auto_praise():
+    faith_obj = game.get_resource_obj('faith')
+    if faith_obj['value'] >= faith_obj['maxValue'] * 0.9:
+        logger.info('Praising the sun!')
+        game.praise_the_sun()
 
 
 def constraint_satisfied(constraint):
@@ -229,22 +271,6 @@ def constraint_build():
     game.is_researched.cache_clear()
 
 
-def do_report():
-    counts = {}
-    global constructed_buildings
-    for building in constructed_buildings:
-        if building not in counts:
-            counts[building] = 1
-        else:
-            counts[building] += 1
-
-    print(f'{datetime.now().strftime("%H:%M:%S")} Constructed the following buildings since last time saving: ')
-    for building, count in counts.items():
-        print(f'{count:2}x {building}')
-
-    constructed_buildings = []
-
-
 def watchdog(jobs: typing.List[Job]):
     pause_everything = game.is_paused()
     jobs_are_paused = jobs[0].next_run_time is None
@@ -269,9 +295,12 @@ if __name__ == '__main__':
 
     jobs = [scheduler.add_job(auto_hunt, 'interval', seconds=30),
             scheduler.add_job(constraint_build, 'interval', seconds=31),
-            scheduler.add_job(auto_craft, 'interval', minutes=2),
+            scheduler.add_job(auto_craft, 'interval', seconds=30),
             scheduler.add_job(auto_trade, 'interval', minutes=1, seconds=1),
-            scheduler.add_job(auto_embassies, 'interval', minutes=1, seconds=5)]
+            scheduler.add_job(auto_embassies, 'interval', minutes=1, seconds=5),
+            scheduler.add_job(auto_praise, 'interval', minutes=1),
+            scheduler.add_job(auto_upgrade, 'interval', minutes=1, seconds=3),
+            scheduler.add_job(auto_research, 'interval', minutes=1, seconds=2)]
 
     time.sleep(3)
     save_job = scheduler.add_job(export_save, 'interval', minutes=20)

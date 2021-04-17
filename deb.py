@@ -119,6 +119,25 @@ def config_build():
 
     return build_any_of_those
 
+the_button_func = """
+window.script_paused = false;
+window.theButton = function() {
+if (document.getElementById("toggleScript").style.color == "black") {
+    document.getElementById("toggleScript").style.color = 'red';
+    gamePage.msg('Script is now paused!');
+    window.script_paused = true;
+} else {
+    document.getElementById("toggleScript").style.color = 'black';
+    gamePage.msg('Script is now running!');
+    window.script_paused = false;
+}
+}
+"""
+
+
+def setup():
+    driver.execute_script(the_button_func)
+    driver.execute_script("$(\"#footerLinks\").append('<div><button id=\"toggleScript\" style=\"color:black\" onclick=\"theButton()\"> Pause script... </button></br></div>');")
 
 
 
@@ -126,3 +145,4 @@ if __name__ == '__main__':
     most_recent_save = sorted(glob.glob(download_path + "/*.txt"), key=sorter)[-1]
     print(f"{datetime.now().strftime('%H:%M:%S')} importing most recent save {most_recent_save}...")
     import_save(most_recent_save)
+    setup()
