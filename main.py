@@ -91,50 +91,77 @@ def auto_hunt():
 
 
 def auto_craft():
-    # todo only craft steel in the early game if we have more plates, so that we can build
-    # some ships
-    # if this isn't implemented it might be hard to buy the first few calciners, because early titanite is hard to find
+    game.update_resources()
 
-    crafts = {
-        'wood': 'beam',
-        'minerals': 'slab',
-        'coal': 'steel',
-        'iron': 'plate',
-        'culture': 'manuscript',
-    }
+    # beam and slabs if they are full
+    if game.resources.wood.almost_full:
+        game.craft_all('beam')
+    if game.resources.minerals.almost_full:
+        game.craft_all('slab')
 
-    if game.is_researched('navigation'):
-        crafts['science'] = 'compedium'
-    else:
-        logger.debug('navigation is not researched yet, so not crafting compendium')
-    if game.is_researched('biochemistry'):
-        if randint(0, 1) == 0:
-            crafts['science'] = 'compedium'
-        else:
-            crafts['science'] = 'blueprint'
+    # plates and steel, try to keep them balanced
+    if game.resources.iron.almost_full and game.resources.plate < game.resources.steel:
+        game.craft_all('plate')
+    if game.resources.coal.almost_full and game.resources.steel < game.resources.plate:
+        game.craft_all('steel')
 
-    # remove parchment -> compendium if we don't have a lot of parchment
-    # this is to ensure chapel can be built
+    # furs -> parchment -> manuscript -> compendium -> blueprint
+    # furs -> parchment is handled by the hunt function
+    # parchment -> manuscript is done iff we have enough culture and
+    # iff it doesn't block chapel construction
     chapel = game.get_building_obj('chapel')
     parchment_chapel_price = chapel['prices'][2]['val'] * game.get_price_ratio('chapel') ** chapel['on']
-    parchment_held = game.get_resource_obj('parchment')['value']
-    if parchment_held < parchment_chapel_price*2 and chapel['unlocked']:
-        # before thorium (one of the last researches with blueprints) I only want to hold ~5000 parchments for this
-        # this number was chosen somewhat arbitrarily, but ensures *some* chapels
-        # get built early, without blocking blueprint production for a super long time
-        if game.is_researched('thorium') or parchment_chapel_price <= 5000:
-            del crafts['culture']
-            logger.debug(f'removed culture since {parchment_chapel_price}*2 is higher than {parchment_held}')
 
-    crafted = []
-    for resource in crafts:
-        res_obj = game.get_resource_obj(resource)
-        if res_obj['value'] >= res_obj['maxValue'] * 0.9:
-            game.craft_all(crafts[resource])
-            crafted.append(crafts[resource])
+    if game.resources.culture.almost_full and (
+            not chapel['unlocked'] or
+            (parchment_chapel_price > 5000 and not game.is_researched('thorium')) or
+            game.resources.parchment.value >= parchment_chapel_price * 2
+    ):
+            game.craft_all('manuscript')
 
-    if crafted:
-        logger.debug(f'Crafting {crafted}!')
+    # manuscript -> compendium -> blueprint
+    if game.resources.science.almost_full:
+
+        if game.is_researched('biochemistry'):
+            if game.resources.compendium < game.resources.blueprint:
+                game.craft_all('compedium')
+            else:
+                game.craft_all('blueprint')
+
+        elif game.is_researched('navigation'):
+            game.craft_all('compedium')
+
+    # scaffold
+    if game.is_researched('navigation') and game.resources.beam > game.resources.scaffold:
+        game.craft_all('scaffold')
+
+    # late game crafting - uses crafted materials as ingredients
+    if game.is_researched('particlePhysics'):
+
+        # gear and alloy
+        if game.resources.steel > game.resources.gear and game.resources.gear <= game.resources.alloy:
+            game.craft_all('gear')
+        elif game.resources.steel > game.resources.alloy and game.resources.alloy < game.resources.gear:
+            if game.resources.titanium > game.resources.alloy:
+                game.craft_all('alloy')
+
+        # concrete
+        if game.resources.slab.value > game.resources.concrete.value * 1000 and \
+                game.resources.steel > game.resources.concrete:
+            game.craft_all('concrate')
+
+        # eludium
+        if game.resources.unobtainium.almost_full:
+            game.craft_all('eludium')
+
+        # kerosene?
+        # thorium?
+        if (
+                game.resources.megalith < game.resources.beam and
+                game.resources.megalith < game.resources.slab and
+                game.resources.megalith < game.resources.plate
+        ):
+            game.craft_all('megalith')
 
 
 def auto_embassies():
@@ -184,7 +211,7 @@ def auto_trade():
             game.craft_all('plate')
 
         if titanium_obj['value'] <= titanium_obj['maxValue'] * 0.5 and zebras_unlocked:
-            logger.info('trading with zebras')
+            logger.debug('trading with zebras')
             slabs = game.get_resource_obj('slab')['value']
             if slabs < 100:
                 game.craft_all('slab')
@@ -192,13 +219,13 @@ def auto_trade():
 
         elif griffins_unlocked:
             game.trade_all('griffins')
-            logger.info('trading with griffins')
+            logger.debug('trading with griffins')
 
 
 def auto_praise():
     faith_obj = game.get_resource_obj('faith')
     if faith_obj['value'] >= faith_obj['maxValue'] * 0.9:
-        logger.info('Praising the sun!')
+        logger.debug('Praising the sun!')
         game.praise_the_sun()
 
 
@@ -294,13 +321,13 @@ if __name__ == '__main__':
     scheduler = BlockingScheduler()
 
     jobs = [scheduler.add_job(auto_hunt, 'interval', seconds=30),
-            scheduler.add_job(constraint_build, 'interval', seconds=31),
+            scheduler.add_job(constraint_build, 'interval', minutes=2),
             scheduler.add_job(auto_craft, 'interval', seconds=30),
-            scheduler.add_job(auto_trade, 'interval', minutes=1, seconds=1),
-            scheduler.add_job(auto_embassies, 'interval', minutes=1, seconds=5),
+            scheduler.add_job(auto_trade, 'interval', minutes=2),
+            scheduler.add_job(auto_embassies, 'interval', minutes=2, seconds=5),
             scheduler.add_job(auto_praise, 'interval', minutes=1),
-            scheduler.add_job(auto_upgrade, 'interval', minutes=1, seconds=3),
-            scheduler.add_job(auto_research, 'interval', minutes=1, seconds=2)]
+            scheduler.add_job(auto_upgrade, 'interval', minutes=2, seconds=3),
+            scheduler.add_job(auto_research, 'interval', minutes=2, seconds=2)]
 
     time.sleep(3)
     save_job = scheduler.add_job(export_save, 'interval', minutes=20)
