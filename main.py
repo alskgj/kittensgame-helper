@@ -112,8 +112,10 @@ def auto_craft():
     chapel = game.get_building_obj('chapel')
     parchment_chapel_price = chapel['prices'][2]['val'] * game.get_price_ratio('chapel') ** chapel['on']
 
+    # this unwieldy block ensures that *some* chapels are built and we still craft manuscripts
     if game.resources.culture.almost_full and (
             not chapel['unlocked'] or
+            parchment_chapel_price > 2_000_000 or
             (parchment_chapel_price > 5000 and not game.is_researched('thorium')) or
             game.resources.parchment.value >= parchment_chapel_price * 2
     ):
@@ -165,7 +167,6 @@ def auto_craft():
 
 
 def auto_embassies():
-    # this is fairly disruptive since it switches tab
     # auto level embassies - only if there are some temples, to ensure there is at least some culture production
     if game.get_building_obj('temple')['on'] >= 10:
         # game.switch_to_trade_tab()
@@ -173,10 +174,7 @@ def auto_embassies():
         time.sleep(1)
         game.upgrade_embassies()
 
-    # this is useful, since we want to be on the build tab often, if we are on another tab,
-    # prices don't get updated and nothing gets built
     game.update_build_tab()
-    #game.switch_to_build_tab()
 
 
 def auto_upgrade():
@@ -239,6 +237,7 @@ def constraint_satisfied(constraint):
 
 
 def config_build(log=False):
+    game.update_build_tab()
     config.read('config.ini')  # refresh view, to reflect user changes
     build_any_of_those = []
 
@@ -247,7 +246,6 @@ def config_build(log=False):
 
     buildable_with_prices = game.get_buildable_with_prices()
     for building in buildable_with_prices:
-        game.update_build_tab()
         name = building["name"]            # ie 'mansion'
         resources = building["resources"]  # ie ['titanium', 'slab', 'steel']
 
@@ -298,6 +296,79 @@ def constraint_build():
     game.is_researched.cache_clear()
 
 
+def constraint_build_space():
+    buildable = config_build_space(log=True)
+    built = []
+    while buildable:
+
+        building = random.choice(buildable)
+        game.build_space(building)
+
+        # log stuff
+        constructed_buildings.append(building)
+        built.append(building)
+
+        # check if we can build more stuff
+        buildable = config_build_space()
+
+    if built:
+        logger.info(f"built {built}")
+    if not built:
+        logger.debug(f"Built nothing!")
+
+    # reset cache
+    game.is_researched.cache_clear()
+
+
+def config_build_space(log=False):
+    game.update_space_tab()
+    config.read('config.ini')  # refresh view, to reflect user changes
+    build_any_of_those = []
+
+    buildings_with_unsatisfied_constraints = set()
+    constraints_not_satisfied = set()
+
+    buildable_with_prices = game.get_space_buildable_with_prices()
+    energy_delta = game.get_energy_surplus()
+
+    for building in buildable_with_prices:
+
+        name = building["name"]            # ie 'mansion'
+        resources = building["resources"]  # ie ['titanium', 'slab', 'steel']
+        effects = building["effects"]
+
+        all_constraints_satisfied = True
+        for res in resources:
+            try:
+                constraint = config['Auto Build Prerequisites'][res]
+            except KeyError:
+                print(f"Resource {res} not in Auto Build Prerequisites...")
+                logger.critical(f"Resource {res} not in Auto Build Prerequisites...")
+                raise NotImplementedError
+            if not constraint_satisfied(constraint):
+                buildings_with_unsatisfied_constraints.add(name)
+                constraints_not_satisfied.add(f'{res}:{constraint}')
+                all_constraints_satisfied = False
+
+        # handle effects
+        if 'energyConsumption' in effects and effects['energyConsumption']*10 > energy_delta:
+            all_constraints_satisfied = False
+            buildings_with_unsatisfied_constraints.add(name)
+            constraints_not_satisfied.add(f'energyConsumption {effects["energyConsumption"]*10} higher than surplus {energy_delta}')
+        elif 'uraniumPerTickCon' in effects and abs(effects['uraniumPerTickCon'])*10 > game.resources.uranium.perTick:
+            all_constraints_satisfied = False
+            buildings_with_unsatisfied_constraints.add(name)
+            constraints_not_satisfied.add(f"Uranium consumption {abs(effects['uraniumPerTickCon'])*10} is too high")
+
+        if all_constraints_satisfied:
+            build_any_of_those.append(name)
+
+    if log:
+        logger.debug(f'Buildings with unsatisfied constraints: {buildings_with_unsatisfied_constraints}')
+        logger.debug(f'Unsatisfied constraints: {constraints_not_satisfied}')
+    return build_any_of_those
+
+
 def watchdog(jobs: typing.List[Job]):
     pause_everything = game.is_paused()
     jobs_are_paused = jobs[0].next_run_time is None
@@ -320,14 +391,16 @@ if __name__ == '__main__':
     print(f'{datetime.now().strftime("%H:%M:%S")} setting up scheduler...')
     scheduler = BlockingScheduler()
 
-    jobs = [scheduler.add_job(auto_hunt, 'interval', seconds=30),
+    jobs = [scheduler.add_job(constraint_build_space, 'interval', minutes=2, seconds=10),
+            scheduler.add_job(auto_hunt, 'interval', seconds=30),
             scheduler.add_job(constraint_build, 'interval', minutes=2),
-            scheduler.add_job(auto_craft, 'interval', seconds=30),
+            scheduler.add_job(auto_craft, 'interval', minutes=1),
             scheduler.add_job(auto_trade, 'interval', minutes=2),
             scheduler.add_job(auto_embassies, 'interval', minutes=2, seconds=5),
             scheduler.add_job(auto_praise, 'interval', minutes=1),
             scheduler.add_job(auto_upgrade, 'interval', minutes=2, seconds=3),
-            scheduler.add_job(auto_research, 'interval', minutes=2, seconds=2)]
+            scheduler.add_job(auto_research, 'interval', minutes=2, seconds=2),
+            ]
 
     time.sleep(3)
     save_job = scheduler.add_job(export_save, 'interval', minutes=20)

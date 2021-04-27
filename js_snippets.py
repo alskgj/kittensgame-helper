@@ -36,6 +36,28 @@ for (btn of gamePage.bldTab.children) {
 }
 return prices;"""
 
+space_buildable_with_prices_and_effects = """
+var prices = [];
+for (panel of gamePage.spaceTab.planetPanels) {
+  for (btn of panel.children) {
+  if (btn.model.enabled && btn.model.hasOwnProperty("metadata") && btn.model.visible) {
+    let obj = {name: btn.model.metadata.name, resources: btn.model.prices.map(x => x.name), effects: btn.model.metadata.effects};
+    prices.push(obj);
+    }
+  }
+}
+return prices;"""
+
+build_x_space = Template("""
+for (panel of gamePage.spaceTab.planetPanels) {
+  for (btn of panel.children) {
+    if (btn.model.enabled && btn.model.hasOwnProperty("metadata") && btn.model.metadata.name == '{{ x }}') {
+    btn.buttonContent.click();
+    }
+  }
+}
+""")
+
 build_x = Template("""
 for (btn of gamePage.bldTab.children) {
   if (btn.model.enabled && btn.model.hasOwnProperty("metadata") && btn.model.metadata.name == '{{ x }}') {

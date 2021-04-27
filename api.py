@@ -58,6 +58,7 @@ class ResourceContainer:
         self.uranium = Resource(resource_map_obj['uranium'])
         self.wood = Resource(resource_map_obj['wood'])
 
+
 class Resource:
     def __init__(self, resource_obj):
         self.name = resource_obj['name']
@@ -181,6 +182,9 @@ class Game:
         self._res_container = ResourceContainer(res_obj)
         return self._res_container
 
+    def get_energy_surplus(self):
+        return self.driver.execute_script('return game.resPool.energyWinterProd - game.resPool.energyCons')
+
     def _setup_additional_buttons(self):
         self.driver.execute_script(js_snippets.function_button_pause_all)
         self.driver.execute_script(js_snippets.add_pause_all_button)
@@ -191,6 +195,10 @@ class Game:
     def update_build_tab(self):
         self.driver.execute_script('gamePage.bldTab.render();')
         self.driver.execute_script('gamePage.bldTab.update();')
+
+    def update_space_tab(self):
+        self.driver.execute_script('gamePage.spaceTab.render();')
+        self.driver.execute_script('gamePage.spaceTab.update();')
 
     def update_diplomacy_tab(self):
         self.driver.execute_script('gamePage.diplomacyTab.render();')
@@ -222,9 +230,16 @@ class Game:
         self.driver.execute_script(js_snippets.build_x.render(x=building_name))
         self.history.build(building_name)
 
+    def build_space(self, building_name):
+        self.driver.execute_script(js_snippets.build_x_space.render(x=building_name))
+        self.history.build(building_name)
+
     def get_buildable_with_prices(self):
         # todo parse the result into python objects
         return self.driver.execute_script(js_snippets.buildable_with_prices)
+
+    def get_space_buildable_with_prices(self):
+        return self.driver.execute_script(js_snippets.space_buildable_with_prices_and_effects)
 
     def craft_all(self, resource):
         self.driver.execute_script(f'gamePage.craftAll("{resource}")')

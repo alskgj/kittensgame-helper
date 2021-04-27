@@ -135,6 +135,61 @@ if (document.getElementById("toggleScript").style.color == "black") {
 """
 
 
+class ResourceContainer:
+    def __init__(self, resource_map_obj):
+        self.alloy = Resource(resource_map_obj['alloy'])
+        self.beam = Resource(resource_map_obj['beam'])
+        self.blueprint = Resource(resource_map_obj['blueprint'])
+        self.catnip = Resource(resource_map_obj['catnip'])
+        self.coal = Resource(resource_map_obj['coal'])
+        self.compendium = Resource(resource_map_obj['compedium'])
+        self.concrete = Resource(resource_map_obj['concrate'])
+        self.culture = Resource(resource_map_obj['culture'])
+        self.eludium = Resource(resource_map_obj['eludium'])
+        self.furs = Resource(resource_map_obj['furs'])
+        self.gear = Resource(resource_map_obj['gear'])
+        self.gold = Resource(resource_map_obj['gold'])
+        self.iron = Resource(resource_map_obj['iron'])
+        self.kerosene = Resource(resource_map_obj['kerosene'])
+        self.catpower = Resource(resource_map_obj['manpower'])
+        self.manuscript = Resource(resource_map_obj['manuscript'])
+        self.megalith = Resource(resource_map_obj['megalith'])
+        self.minerals = Resource(resource_map_obj['minerals'])
+        self.oil = Resource(resource_map_obj['oil'])
+        self.parchment = Resource(resource_map_obj['parchment'])
+        self.plate = Resource(resource_map_obj['plate'])
+        self.scaffold = Resource(resource_map_obj['scaffold'])
+        self.science = Resource(resource_map_obj['science'])
+        self.ship = Resource(resource_map_obj['ship'])
+        self.slab = Resource(resource_map_obj['slab'])
+        self.starchart = Resource(resource_map_obj['starchart'])
+        self.steel = Resource(resource_map_obj['steel'])
+        self.tanker = Resource(resource_map_obj['tanker'])
+        self.time_crystal = Resource(resource_map_obj['timeCrystal'])
+        self.titanium = Resource(resource_map_obj['titanium'])
+        self.unicorns = Resource(resource_map_obj['unicorns'])
+        self.unobtainium = Resource(resource_map_obj['unobtainium'])
+        self.uranium = Resource(resource_map_obj['uranium'])
+
+
+class Resource:
+    def __init__(self, resource_obj):
+        self.name = resource_obj['name']
+        if 'craftable' in resource_obj:
+            self.craftable = resource_obj['craftable']
+        else:
+            self.craftable = False
+
+        # 0 means not maxValue
+        self.max_value = resource_obj['maxValue']
+        if self.max_value == 0:
+            self.max_value = 999_999_999_999_999
+
+        self.perTick = resource_obj['perTickCached']
+        self.unlocked = resource_obj['unlocked']
+        self.value = resource_obj['value']
+
+
 def setup():
     driver.execute_script(the_button_func)
     driver.execute_script("$(\"#footerLinks\").append('<div><button id=\"toggleScript\" style=\"color:black\" onclick=\"theButton()\"> Pause script... </button></br></div>');")
