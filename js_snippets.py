@@ -21,16 +21,11 @@ for (btn of gamePage.bldTab.children) {
 return buildable_right_now;
 """
 
-buildable_with_prices = """
+buildable_with_prices_and_effects = """
 var prices = [];
 for (btn of gamePage.bldTab.children) {
   if (btn.model.enabled && btn.model.hasOwnProperty("metadata")) {
-    let obj = {name: btn.model.metadata.name};
-    let resources = [];
-    for (element of btn.model.prices) {
-      resources.push(element.name);
-    }
-    obj["resources"] = resources;
+    let obj = {name: btn.model.metadata.name, resources: btn.model.prices.map(x => x.name), effects: btn.model.metadata.effects};
     prices.push(obj);
   }
 }

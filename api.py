@@ -236,7 +236,7 @@ class Game:
 
     def get_buildable_with_prices(self):
         # todo parse the result into python objects
-        return self.driver.execute_script(js_snippets.buildable_with_prices)
+        return self.driver.execute_script(js_snippets.buildable_with_prices_and_effects)
 
     def get_space_buildable_with_prices(self):
         return self.driver.execute_script(js_snippets.space_buildable_with_prices_and_effects)
