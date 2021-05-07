@@ -63,7 +63,7 @@ for (btn of gamePage.bldTab.children) {
 
 upgrade_embassies = """
 for (racePanel of gamePage.diplomacyTab.racePanels) {
-    if (racePanel.embassyButton.model.enabled) {
+    if (racePanel.hasOwnProperty("embassyButton") && racePanel.embassyButton.model.enabled) {
         racePanel.embassyButton.buttonContent.click();
     }
 }
@@ -109,5 +109,11 @@ for (btn of gamePage.libraryTab.buttons) {
     btn.buttonContent.click();
     return btn.id;
     }
+}
+"""
+
+explore = """
+if (game.diplomacyTab.hasOwnProperty('exploreBtn')) {
+  game.diplomacyTab.exploreBtn.buttonContent.click();
 }
 """

@@ -57,6 +57,7 @@ class ResourceContainer:
         self.unobtainium = Resource(resource_map_obj['unobtainium'])
         self.uranium = Resource(resource_map_obj['uranium'])
         self.wood = Resource(resource_map_obj['wood'])
+        self.thorium = Resource(resource_map_obj['thorium'])
 
 
 class Resource:
@@ -176,6 +177,16 @@ class Game:
     def resources(self):
         return self._res_container
 
+    def get_jobs(self):
+        return self.driver.execute_script('return game.village.jobs;')
+
+    @property
+    def available_kittens(self):
+        return self.driver.execute_script('return game.village.getFreeKittens();')
+
+    def assign_jobs(self, name: str, amount: int):
+        self.driver.execute_script(f"game.village.assignJob(game.village.getJob('{name}'), {amount})")
+
     def update_resources(self):
         """Refreshes the view of the Game.resources property"""
         res_obj = self.driver.execute_script('return gamePage.resPool.resourceMap;')
@@ -204,9 +215,15 @@ class Game:
         self.driver.execute_script('gamePage.diplomacyTab.render();')
         self.driver.execute_script('gamePage.diplomacyTab.update();')
 
+    def update_religion_tab(self):
+        self.driver.execute_script('gamePage.religionTab.render();')
+
     def update_workshop_tab(self):
         self.driver.execute_script('gamePage.workshopTab.render();')
         self.driver.execute_script('gamePage.workshopTab.update();')
+
+    def upgrade_solar_revolution(self):
+        self.driver.execute_script('gamePage.religionTab.rUpgradeButtons[5].buttonContent.click();')
 
     def buy_first_workshop_upgrade(self):
         self.update_workshop_tab()
@@ -255,6 +272,9 @@ class Game:
 
     def get_race_obj(self, race):
         return self.driver.execute_script(f'return gamePage.diplomacy.get("{race}")')
+
+    def send_explorers(self):
+        return self.driver.execute_script(js_snippets.explore)
 
     @lru_cache
     def is_researched(self, tech):
@@ -309,9 +329,14 @@ class Game:
         else:
             self.driver.execute_script(f'gamePage.diplomacy.tradeAll(game.diplomacy.get("{race}"));')
 
+    def on_pacifism_challenge(self):
+        return self.driver.execute_script('return game.challenges.getChallenge("pacifism").active')
+
     def hunt(self):
-        self.driver.execute_script("gamePage.village.huntAll();")
-        self.history.hunts += 1
+        # dont cheat
+        if not self.on_pacifism_challenge():
+            self.driver.execute_script("gamePage.village.huntAll();")
+            self.history.hunts += 1
 
     def report(self):
         self.history.do_report()
